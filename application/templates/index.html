@@ -1,6 +1,20 @@
 {% include "includes/header.html" %}
-hello world
-{% include "includes/footer.html" %}
-{% include "includes/header.html" %}
-hello world
+
+<form action="/game" method="post">
+    {{ form.hidden_tag() }}
+        <p>
+            {{ form.name.label }}<br>
+            {{ form.name(size=32) }}
+        </p>
+        <p>
+            {{ form.team.label }}<br>
+            {{ form.team }}
+        </p>
+        <p>
+            {{ form.gameid.label }}<br>
+            {{ form.gameid }}
+        </p>
+    <p>{{ form.submitJoin }} OR {{ form.submitCreate }}</p>
+</form>
+{{ msg }}
 {% include "includes/footer.html" %}
