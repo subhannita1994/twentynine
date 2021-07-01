@@ -11,6 +11,7 @@ class CardSuite(enum.Enum):
     HEART = 'hearts'
     CLUB = 'clubs'
     DIAMOND = 'diamonds'
+    NOTRUMP = 'no_trump'
 
     @staticmethod
     def list():
@@ -75,6 +76,8 @@ class Game(db.Model):
     bid_stack = db.Column(MutableDict.as_mutable(db.JSON), default={0:-1, 1:-1, 2:-1, 3:-1})
     double = db.Column(db.Integer, default=1)
     double_counter = db.Column(db.Integer, default=0)
+    aukat_set = db.Column(db.Boolean, default=False)
+
     def __repr__(self):
         return '<Game {id}, {players}>'.format(id=self.id, players=self.players)
     def increment_highest_bid(self):

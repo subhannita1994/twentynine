@@ -13,43 +13,48 @@
             integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
         <link href = "https://code.jquery.com/ui/1.10.4/themes/ui-lightness/jquery-ui.css"
          rel = "stylesheet">
+<style>
+    p {margin-top: 0.2em; margin-bottom: 0em;}
 
+</style>
 
     </head>
-<body>
+<body style="background-color:mintcream">
 <div class="container">
-    <div class="row">Status: </div>
+    <div class="row" id="status" style="background-color:darkslategrey; color:white; font-weight:bold"></div>
 
 
 
     <div class="row">
 
-        <div class="col-2" id="game_info">
-            <p>Game ID: {{game.id}}<br>
-                Score : Red-{{game.red_score}}, Blue-{{game.blue_score}}</p>
+        <div class="col-4" id="game_info">
+            <p id="game_id">Game ID: {{game.id}}</p>
+            <p id="game_score">Score : Red-{{game.red_score}}, Blue-{{game.blue_score}}</p>
+            <p id="game_bid"></p>
+            <p id="game_double"></p>
         </div>
 
-        <div class="col-8" id="partner_info" style="background-color: {{player.team.value}}; height:10vh; color:white">
+        <div class="col-6" id="partner_info" style="background-color: {% if player.team.value=='red' %} coral {% else %} cornflowerblue {% endif %}; height:10vh;">
                 {% if (partner is defined and partner is not none) %}
                     {{partner.name}}
                 {% endif %}
         </div>
 
-        <div class="col-2" id="trump"><button id="show_trump" disabled class="btn btn-primary">Show trump</button></div>
+        <div class="col-2 justify-content-center" id="trump"><button id="show_trump" disabled class="btn btn-primary">Show trump</button></div>
     </div>
 
 
 
     <div class="row">
 
-        <div class="col-2" id="left_opponent_info" style="background-color: {% if player.team.value=='red' %} blue {% else %} red {% endif %}; height:20vh; color:white">
+        <div class="col-2" id="left_opponent_info" style="background-color: {% if player.team.value=='red' %} cornflowerblue {% else %} coral {% endif %}; height:20vh;">
                 {% if (left_opponent is defined and left_opponent is not none) %}
                     {{left_opponent.name}}
                 {% endif %}
         </div>
 
 
-        <div class="col-8" id="game" style="background-color: #eee; height:60vh;">
+        <div class="col-8" id="game" style="background-color:gainsboro; height:60vh; font-size:x-large;">
 
             <div class = "row" style="height:20vh;">
                 <div class="d-flex justify-content-center align-items-start" id="partner_flex" style="width:100%"></div>
@@ -67,7 +72,7 @@
         </div>
 
 
-        <div class="col-2" id="right_opponent_info" style="background-color: {% if player.team.value=='red' %} blue {% else %} red {% endif %}; height:20vh; color:white">
+        <div class="col-2" id="right_opponent_info" style="background-color: {% if player.team.value=='red' %} cornflowerblue {% else %} coral {% endif %}; height:20vh;">
                 {% if (right_opponent is defined and right_opponent is not none) %}
                     {{right_opponent.name}}
                 {% endif %}
@@ -79,7 +84,7 @@
 
     <div class="row">
 
-        <div class="col-10" id="me" data-order="{{player.order}}" style="background-color: {{player.team.value}}; height:20vh; color:white">
+        <div class="col-10" id="me" data-order="{{player.order}}" style="background-color: {% if player.team.value=='red' %} coral {% else %} cornflowerblue {% endif %}; height:20vh;">
             <div class="row" id="me_deck"></div>
             <div class="row" id="me_info">{{player.name}}</div>
         </div>

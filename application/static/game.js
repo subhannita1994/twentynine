@@ -1,5 +1,6 @@
- var me_cards = [];
+var me_cards = [];
 var me_player;
+var card_dealing = 0;
 
 //assigning data order
 if(me_order < 2){
@@ -42,23 +43,6 @@ socket.on('connect', function() {
 
 
 
-//when new player joins, update his place
-socket.on('new_player', function(msg){
-    if(msg.player_id != me_id){
-        switch(msg.player_order){
-            case parseInt($('#partner_info').attr('data-order')):
-                $('#partner_info').html(msg.player_name);
-                break;
-            case parseInt($('#left_opponent_info').attr('data-order')):
-                $('#left_opponent_info').html(msg.player_name);
-                break;
-            case parseInt($('#right_opponent_info').attr('data-order')):
-                $('#right_opponent_info').html(msg.player_name);
-                break;
-        }
-    }
-});
-
 
 //function to handle when a bid is made - disable dropdown and socket emit
 $('#bid_submit').click(function(){
@@ -70,41 +54,48 @@ $('#bid_submit').click(function(){
 
 
 //function to handle when a card is dealt
-var cardDealt = function(){
-    console.log("some card is dealt - don't know what yet");
+var cardDealt = function(card_id){
+    if(card_dealing == 1){
+        console.log(card_id);
+    }
 };
 
 //function to handle when trump is set - disable trump setter and socket emit
-$('#trump_submit').click(function(){
+$(document).on('click','#trump_submit',function(){
     var trump = $('#trump_dropdown').find(":selected").val();
     var trump_order = $('#trump_order').val();
     $(this).remove();
     $('#trump_dropdown').remove();
     $('#trump_order').remove();
+    $('#trump_order_label').remove();
     socket.emit('trump_made', { game_id:game_id, trump:trump, trump_order:trump_order });
 });
 
 //function to handle when double is set/not set
-$('#yes_double').click(function(){
+$(document).on('click','#yes_double',function(){
     $(this).remove();
     $('#no_double').remove();
+    $('#double_text').remove();
     socket.emit('double_made', {player_team:me_team, player_order:me_order, game_id:game_id, double:1});
 });
-$('#no_double').click(function(){
+$(document).on('click','#no_double',function(){
     $(this).remove();
     $('#yes_double').remove();
+    $('#double_text').remove();
     socket.emit('double_made', {player_team:me_team, player_order:me_order, game_id:game_id, double:0});
 });
 
 //function to handle when 24 is bid/not bid
-$('#yes_24').click(function(){
+$(document).on('click','#yes_24',function(){
     $(this).remove();
     $('#no_24').remove();
+    $('#24_text').remove();
     socket.emit('24_made', {player_order:me_order, game_id:game_id, aukat:1});
 });
-$('#no_24').click(function(){
+$(document).on('click','#no_24',function(){
     $(this).remove();
     $('#yes_24').remove();
+    $('#24_text').remove();
     socket.emit('24_made', {player_order:me_order, game_id:game_id, aukat:0});
 });
 
@@ -125,22 +116,6 @@ function make_bid_dropdown(minBid){
     $('#bid_submit').prop('disabled',false);
 }
 
-//when bid has started - show first four cards, show bidding dropdown for player0
-socket.on('bid_start', function(msg){
-    for(var i=0; i < 8; i++){
-        me_cards.push(msg['player'+String(me_order)].deck[i]);
-    }
-    for(var i=0;i<4;i++){
-        c = me_cards[i];
-        $('#me_deck').append($('<img/>', {
-            id: c.id,
-            src: 'static/img/'+c.name+'_of_'+c.suite+'.png',
-            click: cardDealt
-        }).height('140px').width('100px'));
-    }
-    if(me_order==0)
-        make_bid_dropdown(16);
-});
 
 //helper function to update game screen
 function update_screen(p_order, data){
@@ -161,12 +136,13 @@ function update_screen(p_order, data){
 }
 
 /**when game needs to be updated -
-update screen
+update screen, status
+new_player (new player has joined game) - update new player's info
+bid_start (bidding will start now) - show first 4 cards for all players, show bidding dropdown for player with order 0
 bid (bid is made) - make the bid dropdown for next player
 double (bidding round is complete) - ask for double
 set_trump  (trump is to be set) - make the trump dropdown
-show_all_cards - show all cards for everyone
-ask_for_24 - and ask opponents for 24
+show_all_cards - show all cards for everyone and ask opponents for 24
 **/
 socket.on('update_game', function(message){
     if(message.hasOwnProperty('info'))
@@ -176,22 +152,86 @@ socket.on('update_game', function(message){
         screen = message['screen'];
         update_screen(screen.player_order, screen.data);
     }
-    if(gameType.localeCompare('bid') == 0){
+    if(message.hasOwnProperty('status')){
+        $('#status').html(message.status);
+    }
+
+    if(gameType.localeCompare('new_player') == 0){
+        if(info.player_id != me_id){
+            switch(info.player_order){
+                case parseInt($('#partner_info').attr('data-order')):
+                    $('#partner_info').html(info.player_name);
+                    break;
+                case parseInt($('#left_opponent_info').attr('data-order')):
+                    $('#left_opponent_info').html(info.player_name);
+                    break;
+                case parseInt($('#right_opponent_info').attr('data-order')):
+                    $('#right_opponent_info').html(info.player_name);
+                    break;
+            }
+        }
+    }
+
+    else if(gameType.localeCompare('bid_start') == 0){
+        me_cards = [];
+        for(var i=0; i < 8; i++){
+            me_cards.push(info['player'+String(me_order)].deck[i]);
+        }
+        $('#me_deck').empty();
+        for(var i=0;i<4;i++){
+            c = me_cards[i];
+            $('#me_deck').append($('<img/>', {
+                id: c.id,
+                src: 'static/img/'+c.name+'_of_'+c.suite+'.png',
+                click: cardDealt(this.id)
+            }).height('140px').width('100px'));
+        }
+        if(me_order==0)
+            make_bid_dropdown(16);
+    }
+
+    else if(gameType.localeCompare('bid') == 0){
+        if(info.hasOwnProperty('double_set')){
+            if(info.double_set == 2)
+                $('#game_double').html("Double set");
+            else if(info.double_set == 4)
+                $('#game_double').html("Re-Double set");
+        }
         if(me_order == info.next_player_order)
             make_bid_dropdown(info.data);
 
-    }else if(gameType.localeCompare('double') == 0) {
+    }
+
+    else if(gameType.localeCompare('double') == 0) {
+        if(info.hasOwnProperty('bid_winner')){
+            $('#game_bid').html("Bid won by "+info.bid_winner+" at "+info.highest_bid);
+        }
+        if(info.hasOwnProperty('double_set')){
+            if(info.double_set == 2)
+                $('#game_double').html("Double set");
+            else if(info.double_set == 4)
+                $('#game_double').html("Re-Double set");
+        }
         if(me_order == info.double_player_order){
-            $('#bid').append('<br><p>Do you want to set double?</p>');
+            $('#bid').append('<br><p id="double_text">Do you want to set double?</p>');
             $('#bid').append($('<button/>', {id:'yes_double', text:'Yes'}));
             $('#bid').append($('<button/>', {id:'no_double', text:'No'}));
         }
-    }else if(gameType.localeCompare('set_trump') == 0){
+    }
+
+    else if(gameType.localeCompare('set_trump') == 0){
+        if(info.hasOwnProperty('double_set')){
+            if(info.double_set == 2)
+                $('#game_double').html("Double set");
+            else if(info.double_set == 4)
+                $('#game_double').html("Re-Double set");
+        }
         if(info.bid_winner_order == me_order){
             var arr = [{val : 0, text: 'Spades'},
                   {val : 1, text: 'Hearts'},
                   {val : 2, text: 'Clubs'},
-                  {val : 3, text: 'Diamonds'}
+                  {val : 3, text: 'Diamonds'},
+                  {val : 4, text: 'No Trump'}
                 ];
             $('#bid').append($('<select/>', {
                 id:'trump_dropdown'
@@ -200,10 +240,12 @@ socket.on('update_game', function(message){
                 $('#trump_dropdown').append($('<option/>',
                         {value:this.val, text:this.text}));
             });
-            $('#bid').append('<br><input type="checkbox" id="trump_order" />Reverse<br/>');
+            $('#bid').append('<br><input type="checkbox" id="trump_order" /><label for="trump_order" id="trump_order_label">Reverse</label>');
             $('#bid').append($('<button/>', {id:'trump_submit', text:'Set Trump'}));
         }
-    }else if(gameType.localeCompare('show_all_cards')){
+    }
+
+    else if(gameType.localeCompare('show_all_cards') == 0){
         for(var i=4;i<8;i++){
             c = me_cards[i];
             $('#me_deck').append($('<img/>', {
@@ -212,12 +254,28 @@ socket.on('update_game', function(message){
                 click: cardDealt
             }).height('140px').width('100px'));
         }
-    }else if(gameType.localeCompare('ask_for_24')){
         if(me_order ==  info.player_24_order){
-            $('#bid').append('<br><p>Do you want to re-bid 24?</p>');
+            $('#bid').append('<br><p id="24_text">Do you want to re-bid 24?</p>');
             $('#bid').append($('<button/>', {id:'yes_24', text:'Yes'}));
             $('#bid').append($('<button/>', {id:'no_24', text:'No'}));
         }
+    }
+
+    else if(gameType.localeCompare('ask_for_24') == 0){
+        if(me_order ==  info.player_24_order){
+            $('#bid').append('<br><p id="24_text">Do you want to re-bid 24?</p>');
+            $('#bid').append($('<button/>', {id:'yes_24', text:'Yes'}));
+            $('#bid').append($('<button/>', {id:'no_24', text:'No'}));
+        }
+    }
+
+    else if(gameType.localeCompare('game_start') == 0){
+        $('#bid').empty();
+        $('#me_flex').empty();
+        $('#partner_flex').empty();
+        $('#left_opponent_flex').empty();
+        $('#right_opponent_flex').empty();
+        card_dealing = 1;
     }
 
 
