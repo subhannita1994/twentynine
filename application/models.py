@@ -69,14 +69,18 @@ class Game(db.Model):
     players = db.relationship('Player', backref='game', lazy=True)
     red_score = db.Column(db.Integer, default=0)
     blue_score = db.Column(db.Integer, default=0)
+    red_points = db.Column(db.Integer, default=0)
+    blue_points = db.Column(db.Integer, default=0)
     highest_bid = db.Column(db.Integer, default=16)
     bid_winner = db.Column(db.Enum(Team))
     trump = db.Column(db.Enum(CardSuite))
     trump_order = db.Column(db.Integer, default=0)
+    trump_revealed = db.Column(db.Boolean, default=False)
     bid_stack = db.Column(MutableDict.as_mutable(db.JSON), default={0:-1, 1:-1, 2:-1, 3:-1})
     double = db.Column(db.Integer, default=1)
     double_counter = db.Column(db.Integer, default=0)
     aukat_set = db.Column(db.Boolean, default=False)
+    round = db.Column(MutableDict.as_mutable(db.JSON), default={})
 
     def __repr__(self):
         return '<Game {id}, {players}>'.format(id=self.id, players=self.players)
@@ -86,6 +90,12 @@ class Game(db.Model):
         self.double = self.double * 2
     def increment_double_counter(self):
         self.double_counter = self.double_counter + 1
+    def assign_points(self, winner, points):
+        if winner.team == Team.RED:
+            self.red_points = self.red_points + points
+        else:
+            self.blue_points = self.blue_points + points
+
 
 
 class Card(db.Model):

@@ -68,8 +68,6 @@ def game():
 	return render_template("game.html", game=game, player=player)
 
 
-
-
 @socketio.on('join')
 def on_join(data):
 	game_id = data['game_id']
@@ -91,8 +89,7 @@ def startGame(game, game_id):
 	temp.remove(models.CardSuite.NOTRUMP.value)
 	deck = list(itertools.product(models.CardNumber.list(), temp))
 	random.shuffle(deck)
-	deal_cards(deck, game, 0)
-	deal_cards(deck, game, 4)
+	deal_cards(deck, game)
 	player0 = models.Player.query.filter_by(game_id=game.id).filter_by(order=0).first().as_dict()
 	player1 = models.Player.query.filter_by(game_id=game.id).filter_by(order=1).first().as_dict()
 	player2 = models.Player.query.filter_by(game_id=game.id).filter_by(order=2).first().as_dict()
@@ -100,16 +97,17 @@ def startGame(game, game_id):
 	socketio.emit('update_game', {'type':'bid_start', 'info':{'player0':player0, 'player1':player1, 'player2':player2, 'player3':player3}, 'status':"Bidding turn - "+player0['name']}, to=game_id)
 
 
-def deal_cards(deck, game, init):
-
-	for p in game.players:
-		for i in range(4):
-			suite = models.CardSuite(deck[init][1])
-			number = models.CardNumber.get_by_number(deck[init][0]['number'])
-			card = models.Card(player_id=p.id, number=number, suite=suite)
-			init = init+1
-			p.deck.append(card)
-			db.session.commit()
+def deal_cards(deck, game):
+	init = 0
+	for j in range(2):
+		for p in game.players:
+			for i in range(4):
+				suite = models.CardSuite(deck[init][1])
+				number = models.CardNumber.get_by_number(deck[init][0]['number'])
+				card = models.Card(player_id=p.id, number=number, suite=suite)
+				init = init+1
+				p.deck.append(card)
+				db.session.commit()
 
 
 @socketio.on('bid_made')
@@ -126,7 +124,6 @@ def on_bid_made(data):
 			mainBidder = int(list(game.bid_stack)[0])
 			print(player_order," passed - stack:",game.bid_stack," mainbidder:",mainBidder)
 		except:
-			#TODO: game needs to completely restart - fresh cards
 			game.bid_stack = {0:-1, 1:-1, 2:-1, 3:-1}
 			db.session.commit()
 			startGame(game, game_id)
@@ -142,9 +139,14 @@ def on_bid_made(data):
 				double_player = models.Player.query.filter_by(game_id=int(game_id)).filter(models.Player.team!=winner.team).order_by(models.Player.order.asc()).first()
 				if game.double == 4:
 					player = models.Player.query.filter_by(game_id=int(game_id), order=0).first()
-					socketio.emit("update_game", {'type':'game_start',  'screen':{'player_order':player_order, 'data':"Pass"}, 'status':"Game starts with "+player.name}, to=game_id)
+					# socketio.emit("update_game", {'type':'game_start',  'screen':{'player_order':player_order, 'data':"Pass", 'type':'notImage', 'clear':0}, 'status':"Game starts with "+player.name}, to=game_id)
+					socketio.emit("update_game",
+								  {'type': 'set_trump', 'info': {'bid_winner_order': mainBidder, 'double_set': game.double},
+								   'status': player.name + " has passed -- Bid winner setting trump",
+								   'screen':{'player_order':player_order, 'data':"Pass", 'type':'notImage', 'clear':0}}, to=game_id)
+
 				else:
-					socketio.emit("update_game", {'type':'double', 'screen':{'player_order':player_order, 'data':"Pass"},
+					socketio.emit("update_game", {'type':'double', 'screen':{'player_order':player_order, 'data':"Pass", 'type':'notImage', 'clear':0},
 											  'info':{'double_player_order':double_player.order, 'bid_winner':winner.name, 'highest_bid':game.highest_bid}, 'status':"Asking for double to "+double_player.name}, to=game_id)
 				return True
 		elif game.bid_stack[str(mainBidder)] == -1:	#game restart
@@ -171,10 +173,10 @@ def on_bid_made(data):
 					models.Player.team != winner.team).order_by(models.Player.order.asc()).first()
 				if game.double == 4:
 					player = models.Player.query.filter_by(game_id=int(game_id), order=0).first()
-					socketio.emit("update_game", {'type':'game_start', 'screen': {'player_order': player_order, 'data': game.highest_bid},'status':"Game starts with "+player.name}, to=game_id)
+					socketio.emit("update_game", {'type':'game_start', 'screen': {'player_order': player_order, 'data': game.highest_bid, 'type':'notImage', 'clear':0},'status':"Game starts with "+player.name}, to=game_id)
 				else:
 					socketio.emit("update_game",
-							  {'type': 'double', 'screen': {'player_order': player_order, 'data': game.highest_bid},
+							  {'type': 'double', 'screen': {'player_order': player_order, 'data': game.highest_bid, 'type':'notImage', 'clear':0},
 							   'info': {'double_player_order': double_player.order, 'bid_winner': winner.name,
 										'highest_bid': game.highest_bid},
 							   'status': "Asking for double to " + double_player.name}, to=game_id)
@@ -187,7 +189,7 @@ def on_bid_made(data):
 
 	db.session.commit()
 	next_player = models.Player.query.filter_by(game_id=int(game_id), order=next_player_order).first()
-	socketio.emit("update_game", {'type':'bid', 'screen':{'player_order':player_order,  'data':bid},
+	socketio.emit("update_game", {'type':'bid', 'screen':{'player_order':player_order,  'data':bid, 'type':'notImage', 'clear':0},
 								  'info':{'next_player_order':next_player_order,  'data':game.highest_bid}, 'status': "Bidding turn - "+next_player.name}, to=game_id)
 
 
@@ -234,18 +236,30 @@ def on_double_made(data):
 			socketio.emit("update_game", {'type':'double', 'info':{'double_player_order':double_player.order}, 'status':player.name+" has passed on double -- asking for double to "+double_player.name}, to=game_id)
 
 
-
 @socketio.on('trump_made')
 def on_trump_made(data):
 	game_id = data['game_id']
+	trump = data['trump']
+	trump_order = data['trump_order']
 	game = models.Game.query.filter_by(id=int(game_id)).first()
 	player_24 = models.Player.query.filter_by(game_id=int(game_id)).filter(
 		models.Player.team != game.bid_winner).order_by(models.Player.order.asc()).first()
+	game.trump_order = trump_order
+	if trump == 0:
+		game.trump = models.CardSuite.SPADE
+	elif trump == 1:
+		game.trump = models.CardSuite.HEART
+	elif trump == 2:
+		game.trump = models.CardSuite.CLUB
+	elif trump == 3:
+		game.trump = models.CardSuite.DIAMOND
+	elif trump == 4:
+		game.trump = models.CardSuite.NOTRUMP
 	game.double_counter = 0
 	db.session.commit()
 	if game.aukat_set:
 		player0 = models.Player.query.filter_by(game_id=int(game_id), order=0).first()
-		socketio.emit("update_game", {'type': 'game_start', 'info':{}, 'status':"Game starts with "+player0.name}, to=game_id)
+		socketio.emit("update_game", {'type': 'game_start',  'status':"Game starts with "+player0.name}, to=game_id)
 	else:
 		socketio.emit("update_game",
 				  {'type': 'show_all_cards', 'info': {'player_24_order': player_24.order, 'data': 24}, 'status':"Trump set -- Asking for 24 to "+player_24.name}, to=game_id)
@@ -273,13 +287,145 @@ def on_24_made(data):
 		if game.double != 4:
 			game.set_double()
 		db.session.commit()
-		socketio.emit("update_game", {'type': 'bid', 'screen': {'player_order': player_order, 'data': 24},
+		socketio.emit("update_game", {'type': 'bid', 'screen': {'player_order': player_order, 'data': 24, 'type':'notImage', 'clear':0},
 									  'info': {'next_player_order': player_bid_winner.order, 'data': game.highest_bid, 'double_set':game.double}, 'status':"Bidding turn - "+player_bid_winner.name},
 					  to=game_id)
 	else:
+		game.increment_double_counter()
+		db.session.commit()
 		if game.double_counter == 2:
+			game.double_counter = 0
+			db.session.commit()
 			player0 = models.Player.query.filter_by(game_id=int(game_id), order=0).first()
-			socketio.emit("update_game", {'type': 'game_start', 'info':{}, 'status':player.name+" has passed -- Game starts with "+player0.name}, to=game_id)
+			socketio.emit("update_game", {'type': 'game_start',  'status':player.name+" has passed -- Game starts with "+player0.name}, to=game_id)
 		else:
 			socketio.emit("update_game",
 						  {'type': 'ask_for_24', 'info': {'player_24_order': player_24_partner.order, 'data': 24}, 'status':player.name+" has passed -- Asking for 24 to "+player_24_partner.name}, to=game_id)
+
+
+@socketio.on('trump_revealed')
+def on_trump_reveal(data):
+	game_id = data['game_id']
+	game = models.Game.query.filter_by(id=int(game_id)).first()
+	game.trump_revealed = True
+	db.session.commit()
+	player_order = data['player_order']
+	player = models.Player.query.filter_by(game_id=int(game_id), order=player_order).first()
+	restrictions = []
+	trump_suite = game.trump
+	trump_order = game.trump_order
+	for c in player.deck:
+		if c.suite != trump_suite:
+			restrictions.append(c.id)
+	if len(restrictions) == len(player.deck):
+		restrictions.clear()
+
+	trump = ""
+	if trump_suite.value == 'no_trump' and trump_order == 0:
+		trump = "red_joker"
+	elif trump_suite.value == 'no_trump' and trump_order == 1:
+		trump = "red_joker_reverse"
+	elif trump_order == 0:
+		trump = "5_of_"+trump_suite.value
+	elif trump_order == 1:
+		trump = "2_of_"+trump_suite.value
+
+	status = player.name+" revealed Trump - "+trump_suite
+	if trump_order == 1:
+		status = status+" - Reverse"
+
+	socketio.emit("update_game", {'type':'deal_card', 'info':{'next_player_order':player_order, 'restrictions':restrictions, 'allow_trump_reveal':0},
+								  'trump':trump, 'status':status}, to=game_id)
+
+
+def compete(c1, p1, c2, p2, order = 0):
+	if order == 0:
+		if c1.number.value['priority'] > c2.number.value['priority']:
+			return p1
+		else:
+			return p2
+	else:
+		if c1.number.value['priority'] < c2.number.value['priority']:
+			return p1
+		else:
+			return p2
+
+
+def decide_winner_points(round_history, trump_revealed, trump_order, trump):
+	first_player_order = list(round_history)[0]
+	first_card_id = round_history[first_player_order]
+	round_history.pop(first_player_order)
+	first_card = models.Card.query.filter_by(id=first_card_id).first()
+	first_suite = first_card.suite
+	points = first_card.number.value['points']
+	winner_player_order = first_player_order
+	winner_card = first_card
+	for player_order, card_id in round_history.items():
+		card = models.Card.query.filter_by(id=card_id).first()
+		points = points + card.number.value['points']
+		if card.suite == first_suite:
+			if trump_revealed:
+				winner_player_order = compete(winner_card, winner_player_order, card, player_order, trump_order)
+			else:
+				winner_player_order = compete(winner_card, winner_player_order, card, player_order)
+		elif trump_revealed and trump != models.CardSuite.NOTRUMP and card.suite == trump:
+			winner_player_order = compete(winner_card, winner_player_order, card, player_order, trump_order)
+		winner_card = round_history.get(winner_player_order)
+	result = {'winner_player_order':winner_player_order, 'points':points}
+	return result
+
+
+@socketio.on('card_dealt')
+def on_card_dealt(data):
+	game_id = data['game_id']
+	player_order = data['player_order']
+	card_id = int(data['card'])
+	card = models.Card.query.filter_by(id=card_id).first()
+	game = models.Game.query.filter_by(id=int(game_id)).first()
+	game.round[player_order] = card.id
+	player = models.Player.query.filter_by(game_id=int(game_id), order=player_order).first()
+	player.deck.remove(card)
+	db.session.commit()
+	screen = {'player_order': player_order, 'data': card.number.value['name'] + "_of_" + card.suite.value,
+			  'type': 'image', 'clear':0}
+	restrictions = []
+	info = {'next_player_order':-1, 'restrictions':restrictions, 'allow_trump_reveal':0}
+	status = ""
+	if len(game.round) == 4:
+		result = decide_winner_points(game.round, game.trump_revealed, game.trump_order, game.trump)
+		winner_player_order = result['winner_player_order']
+		winner = models.Player.query.filter_by(game_id=int(game_id), order=int(winner_player_order)).first()
+		points = result['points']
+		game.assign_points(winner, points)
+		#TODO: send last round info to view
+		game.round.clear()
+		db.session.commit()
+		info['next_player_order'] = winner.order
+		status = "Team " + winner.team.value + " has won " + points + " points -- Next player: " + winner.name
+	else:
+		next_player_order = -1
+		if player_order == 3:
+			next_player_order = 0
+		else:
+			next_player_order = player_order + 1
+		next_player = models.Player.query.filter_by(game_id=int(game_id), order=next_player_order).first()
+		starting_player_order = list(game.round)[0]
+		starting_card_id = game.round[starting_player_order]
+		starting_card = models.Card.query.filter_by(id=starting_card_id).first()
+		print(starting_card.suite.value)
+		for c in next_player.deck:
+			print("card:",c.suite.value)
+			if c.suite.value != starting_card.suite.value:
+				restrictions.append(c.id)
+		print("restrictions:",restrictions)
+		if len(restrictions) == len(next_player.deck):
+			restrictions.clear()
+			if game.trump_revealed == False:
+				info['allow_trump_reveal'] = 1
+		if player_order == 0:
+			screen['clear'] = 1
+		info['next_player_order'] = next_player_order
+		info['restrictions'] = restrictions
+		status = "Next player: "+next_player.name
+
+	socketio.emit("update_game", {'type':'deal_card', 'info':info, 'screen':screen, 'status':status}, to=game_id)

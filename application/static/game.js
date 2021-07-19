@@ -54,11 +54,18 @@ $('#bid_submit').click(function(){
 
 
 //function to handle when a card is dealt
-var cardDealt = function(card_id){
-    if(card_dealing == 1){
-        console.log(card_id);
+$(document).on('click', '[id*="card_"]', function(e){
+    card_id = e.target.id;
+    if(card_dealing == 1 && $('#'+card_id).css('opacity') == 1){
+        card_dealing = 0;
+        $('#show_trump').prop('disabled', true);
+        $('#me_deck').children().css('opacity',1);
+        card_id = card_id.replace("card_", "");
+        socket.emit('card_dealt', {game_id: game_id, player_order:me_order, card:card_id});
+        $(this).remove();
     }
-};
+});
+
 
 //function to handle when trump is set - disable trump setter and socket emit
 $(document).on('click','#trump_submit',function(){
@@ -99,6 +106,11 @@ $(document).on('click','#no_24',function(){
     socket.emit('24_made', {player_order:me_order, game_id:game_id, aukat:0});
 });
 
+//function to handle when trump is revealed
+$(document).on('click', '#show_trump', function(){
+    $(this).prop('disabled', true);
+    socket.emit('trump_revealed', {game_id:game_id, player_order:player_order});
+});
 
 //helper function to make bid dropdown
 function make_bid_dropdown(minBid){
@@ -118,22 +130,35 @@ function make_bid_dropdown(minBid){
 
 
 //helper function to update game screen
-function update_screen(p_order, data){
+function update_screen(p_order, data, type){
+    if(type.localeCompare("image") == 0)
+        data = $('<img/>', {src:'static/img/'+data+'.png'}).height('140px').width('100px');
     switch(p_order){
-            case parseInt($('#me_flex').attr('data-order')):
-                $('#me_flex').html(data);
-                break;
-            case parseInt($('#partner_flex').attr('data-order')):
-                $('#partner_flex').html(data);
-                break;
-            case parseInt($('#left_opponent_flex').attr('data-order')):
-                $('#left_opponent_flex').html(data);
-                break;
-            case parseInt($('#right_opponent_flex').attr('data-order')):
-                $('#right_opponent_flex').html(data);
-                break;
-        }
+        case parseInt($('#me_flex').attr('data-order')):
+            $('#me_flex').html(data);
+            break;
+        case parseInt($('#partner_flex').attr('data-order')):
+            $('#partner_flex').html(data);
+            break;
+        case parseInt($('#left_opponent_flex').attr('data-order')):
+            $('#left_opponent_flex').html(data);
+            break;
+        case parseInt($('#right_opponent_flex').attr('data-order')):
+            $('#right_opponent_flex').html(data);
+            break;
+    }
+
 }
+
+//helper functtion to empty screen
+function empty_screen(){
+    $('#bid').empty();
+    $('#me_flex').empty();
+    $('#partner_flex').empty();
+    $('#left_opponent_flex').empty();
+    $('#right_opponent_flex').empty();
+}
+
 
 /**when game needs to be updated -
 update screen, status
@@ -150,10 +175,15 @@ socket.on('update_game', function(message){
     gameType = message['type'];
     if(message.hasOwnProperty('screen')){
         screen = message['screen'];
-        update_screen(screen.player_order, screen.data);
+        if(screen.clear == 1)
+            empty_screen()
+        update_screen(screen.player_order, screen.data, screen.type);
     }
     if(message.hasOwnProperty('status')){
         $('#status').html(message.status);
+    }
+    if(message.hasOwnProperty('trump')){
+        $('#trump').html($('<img/>', {src:'static/img/'+message.trump+'.png'}));
     }
 
     if(gameType.localeCompare('new_player') == 0){
@@ -181,10 +211,9 @@ socket.on('update_game', function(message){
         for(var i=0;i<4;i++){
             c = me_cards[i];
             $('#me_deck').append($('<img/>', {
-                id: c.id,
-                src: 'static/img/'+c.name+'_of_'+c.suite+'.png',
-                click: cardDealt(this.id)
-            }).height('140px').width('100px'));
+                id: "card_"+c.id,
+                src: 'static/img/'+c.name+'_of_'+c.suite+'.png'
+            }).height('140px').width('100px').css('opacity',1));
         }
         if(me_order==0)
             make_bid_dropdown(16);
@@ -249,10 +278,9 @@ socket.on('update_game', function(message){
         for(var i=4;i<8;i++){
             c = me_cards[i];
             $('#me_deck').append($('<img/>', {
-                id: c.id,
-                src: 'static/img/'+c.name+'_of_'+c.suite+'.png',
-                click: cardDealt
-            }).height('140px').width('100px'));
+                id: "card_"+c.id,
+                src: 'static/img/'+c.name+'_of_'+c.suite+'.png'
+            }).height('140px').width('100px').css('opacity',1));
         }
         if(me_order ==  info.player_24_order){
             $('#bid').append('<br><p id="24_text">Do you want to re-bid 24?</p>');
@@ -270,12 +298,22 @@ socket.on('update_game', function(message){
     }
 
     else if(gameType.localeCompare('game_start') == 0){
-        $('#bid').empty();
-        $('#me_flex').empty();
-        $('#partner_flex').empty();
-        $('#left_opponent_flex').empty();
-        $('#right_opponent_flex').empty();
-        card_dealing = 1;
+        if(me_order == 0)
+            card_dealing = 1;
+    }
+
+    else if(gameType.localeCompare('deal_card') == 0){
+        if(me_order == info.next_player_order) {
+            for(var i in info.restrictions){
+                c_id = info.restrictions[i];
+                console.log(c_id);
+                $('#card_'+c_id).css('opacity', 0.3);
+            }
+            card_dealing = 1;
+            if(info.allow_trump_reveal == 1){
+                $('#show_trump').prop('disabled',false);
+            }
+        }
     }
 
 
